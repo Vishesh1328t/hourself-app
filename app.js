@@ -10,6 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const calendarDays = document.getElementById('calendar-days');
     const currentMonthYear = document.getElementById('current-month-year');
     
+    // ---- Global State ----
+    let monthDataCache = {};
+    let isMonthDataLoaded = false;
+
     // ---- API Helpers ----
     async function fetchMonthData(year, month) {
         try {
@@ -105,7 +109,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Fetch background data from our MongoDB Express API WITHOUT blocking UI
+        isMonthDataLoaded = false;
         fetchMonthData(currentYear, currentMonth).then(monthData => {
+            monthDataCache = monthData;
+            isMonthDataLoaded = true;
             for (let i = 1; i <= daysInMonth; i++) {
                 const dateStr = `${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
                 const cell = dayDivMap[dateStr];
@@ -176,16 +183,27 @@ document.addEventListener('DOMContentLoaded', () => {
         prodScoreCounter.innerText = activeScore;
     }
     
-    async function openDailyModal(dateStr, dayIndex, monthName) {
+    function openDailyModal(dateStr, dayIndex, monthName) {
         activeDateStr = dateStr;
         modalDateTitle.innerText = `${monthName} ${dayIndex}, ${currentYear}`;
-        
-        // Show loading state first
-        hourlyList.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 1.1rem;">Loading your tasks from MongoDB...<br><i class="fa-solid fa-circle-notch fa-spin" style="margin-top: 15px; font-size: 2rem;"></i></div>';
         dailyModal.classList.add('active');
         
-        // Fetch from Express Server
-        const dayRecord = await fetchDayData(dateStr);
+        if (!isMonthDataLoaded) {
+            hourlyList.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 1.1rem;">Loading your tasks...<br><i class="fa-solid fa-circle-notch fa-spin" style="margin-top: 15px; font-size: 2rem;"></i></div>';
+            
+            // Fallback: wait for day data independently if they clicked before month loaded
+            fetchDayData(dateStr).then(dayRecord => {
+                monthDataCache[dateStr] = dayRecord;
+                renderModalContent(dateStr);
+            });
+            return;
+        }
+
+        renderModalContent(dateStr);
+    }
+    
+    function renderModalContent(dateStr) {
+        const dayRecord = monthDataCache[dateStr] || { hours: {}, prodScore: 0 };
         refreshProdScoreDisplay(dayRecord.prodScore);
         
         hourlyList.innerHTML = '';
@@ -209,10 +227,12 @@ document.addEventListener('DOMContentLoaded', () => {
             textarea.placeholder = `What did you do at ${hourLabel}?`;
             textarea.value = dayHours[i] || ''; 
             
-            // Debounce the save trigger instead of making an HTTP post request on every keystroke
             let timeoutId;
             textarea.addEventListener('input', (e) => {
                 dayHours[i] = e.target.value;
+                if (!monthDataCache[dateStr]) monthDataCache[dateStr] = { hours: dayHours, prodScore: activeScore };
+                monthDataCache[dateStr].hours = dayHours;
+                
                 clearTimeout(timeoutId);
                 timeoutId = setTimeout(() => {
                     saveDayHours(dateStr, dayHours);
@@ -231,7 +251,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const targetRow = hourlyList.children[currentHour];
                 if (targetRow) {
                     targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Automatically focus textarea if needed: targetRow.querySelector('textarea').focus();
                 }
             }, 100); 
         }
