@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HourSelf</title>
+    <!-- Modern Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar: Pomodoro & Controls -->
+        <aside class="sidebar glass-panel">
+            <h1 class="logo"><i class="fa-solid fa-hourglass-half"></i> HourSelf</h1>
+            
+            <div class="pomodoro-container">
+                <h2>Pomodoro</h2>
+                <div class="timer-display" id="timer-display">25:00</div>
+                <div class="timer-status" id="timer-status">Ready to Focus</div>
+                
+                <div class="timer-controls">
+                    <button id="btn-start" class="btn primary"><i class="fa-solid fa-play"></i> Start</button>
+                    <button id="btn-pause" class="btn secondary" disabled><i class="fa-solid fa-pause"></i> Pause</button>
+                    <button id="btn-reset" class="btn secondary"><i class="fa-solid fa-rotate-right"></i> Reset</button>
+                </div>
+
+                <div class="timer-settings">
+                    <div class="setting-group">
+                        <label>Focus (min)</label>
+                        <input type="number" id="focus-time" value="25" min="1" max="120">
+                    </div>
+                    <div class="setting-group">
+                        <label>Break (min)</label>
+                        <input type="number" id="break-time" value="5" min="1" max="60">
+                    </div>
+                </div>
+            </div>
+
+            <div class="quote-container">
+                <p>"Focus on being productive instead of busy."</p>
+            </div>
+        </aside>
+
+        <!-- Main Content: Calendar -->
+        <main class="main-content glass-panel">
+            <div class="calendar-header">
+                <button id="prev-month" class="icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
+                <h2 id="current-month-year">Month Year</h2>
+                <button id="next-month" class="icon-btn"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+            
+            <div class="calendar-grid">
+                <div class="weekdays">
+                    <div>Sun</div>
+                    <div>Mon</div>
+                    <div>Tue</div>
+                    <div>Wed</div>
+                    <div>Thu</div>
+                    <div>Fri</div>
+                    <div>Sat</div>
+                </div>
+                
+                <!-- Days will be dynamically injected here -->
+                <div id="calendar-days" class="calendar-days"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Daily Hourly View Modal -->
+    <div class="modal-overlay" id="daily-modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <h2 id="modal-date-title">Date</h2>
+                    <div class="productivity-counter" title="Productivity Score (Auto-increments after Focus time)">
+                        <button id="prod-minus" class="icon-btn-small" title="Decrease score"><i class="fa-solid fa-minus"></i></button>
+                        <span id="prod-score" class="score-display">0</span> <i class="fa-solid fa-fire fire-icon"></i>
+                        <button id="prod-plus" class="icon-btn-small" title="Increase score"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                </div>
+                <button id="close-modal" class="icon-btn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="hourly-list" id="hourly-list">
+                <!-- Hourly rows dynamically injected: 12 AM to 11 PM -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
