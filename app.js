@@ -57,27 +57,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- Render Calendar Grid ----
-    async function renderCalendar() {
-        // Show loading indicator
-        calendarDays.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; margin-top: 2rem; color: var(--text-muted); font-size: 1.1rem;">Loading Calendar Data...</div>';
+    function renderCalendar() {
         currentMonthYear.innerText = `${monthNames[currentMonth]} ${currentYear}`;
-        
-        // Fetch background data from our MongoDB Express API
-        const monthData = await fetchMonthData(currentYear, currentMonth);
-
-        calendarDays.innerHTML = ''; // Clear loading
+        calendarDays.innerHTML = ''; 
 
         const firstDay = new Date(currentYear, currentMonth, 1).getDay();
         const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
         
-        // empty slots 
+        // Render empty slots 
         for (let i = 0; i < firstDay; i++) {
             const emptyDiv = document.createElement('div');
             emptyDiv.classList.add('calendar-day', 'empty');
             calendarDays.appendChild(emptyDiv);
         }
         
-        // Month days
+        const dayDivMap = {};
+
+        // Render month days instantly
         for (let i = 1; i <= daysInMonth; i++) {
             const dayDiv = document.createElement('div');
             dayDiv.classList.add('calendar-day');
@@ -92,44 +88,64 @@ document.addEventListener('DOMContentLoaded', () => {
             dayDiv.appendChild(dayNum);
             
             const dateStr = `${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
-            const dayInfo = monthData[dateStr] || { hours: {}, prodScore: 0 };
             
-            let filledCount = 0;
-            if (dayInfo.hours) {
-                Object.values(dayInfo.hours).forEach(val => { 
-                    if(val && val.trim() !== '') filledCount++; 
-                });
-            }
-            
-            const prodScore = dayInfo.prodScore || 0;
-            
-            if (filledCount > 0 || prodScore > 0) {
-                const statsContainer = document.createElement('div');
-                statsContainer.classList.add('day-stats');
-                
-                if (filledCount > 0) {
-                    const preview = document.createElement('div');
-                    preview.classList.add('day-badge');
-                    preview.innerText = `${filledCount} hr${filledCount > 1 ? 's' : ''}`;
-                    statsContainer.appendChild(preview);
-                }
-                
-                if (prodScore > 0) {
-                    const fire = document.createElement('div');
-                    fire.classList.add('day-badge', 'fire');
-                    fire.innerHTML = `${prodScore} <i class="fa-solid fa-fire"></i>`;
-                    statsContainer.appendChild(fire);
-                }
-                
-                dayDiv.appendChild(statsContainer);
-            }
+            // Add subtle loading spinner inside the day
+            const loader = document.createElement('div');
+            loader.classList.add('day-stats-loader');
+            loader.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin" style="font-size: 0.8rem; color: var(--text-muted); opacity: 0.5;"></i>';
+            dayDiv.appendChild(loader);
 
             dayDiv.addEventListener('click', () => {
                 openDailyModal(dateStr, i, monthNames[currentMonth]);
             });
             
             calendarDays.appendChild(dayDiv);
+            
+            dayDivMap[dateStr] = { div: dayDiv, loader };
         }
+        
+        // Fetch background data from our MongoDB Express API WITHOUT blocking UI
+        fetchMonthData(currentYear, currentMonth).then(monthData => {
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateStr = `${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
+                const cell = dayDivMap[dateStr];
+                if (!cell) continue;
+
+                if (cell.loader) cell.loader.remove(); // clear loading spinner
+
+                const dayInfo = monthData[dateStr] || { hours: {}, prodScore: 0 };
+                
+                let filledCount = 0;
+                if (dayInfo.hours) {
+                    Object.values(dayInfo.hours).forEach(val => { 
+                        if(val && val.trim() !== '') filledCount++; 
+                    });
+                }
+                
+                const prodScore = dayInfo.prodScore || 0;
+                
+                if (filledCount > 0 || prodScore > 0) {
+                    const statsContainer = document.createElement('div');
+                    statsContainer.classList.add('day-stats');
+                    
+                    if (filledCount > 0) {
+                        const preview = document.createElement('div');
+                        preview.classList.add('day-badge');
+                        preview.innerText = `${filledCount} hr${filledCount > 1 ? 's' : ''}`;
+                        statsContainer.appendChild(preview);
+                    }
+                    
+                    if (prodScore > 0) {
+                        const fire = document.createElement('div');
+                        fire.classList.add('day-badge', 'fire');
+                        fire.innerHTML = `${prodScore} <i class="fa-solid fa-fire"></i>`;
+                        statsContainer.appendChild(fire);
+                    }
+                    
+                    cell.div.appendChild(statsContainer);
+                }
+            }
+        });
     }
     
     // Navigation

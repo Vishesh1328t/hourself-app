@@ -316,6 +316,11 @@ body {
     border-color: rgba(255, 170, 0, 0.3);
 }
 
+.day-stats-loader {
+    margin-top: auto;
+    text-align: right;
+}
+
 /* Modal */
 .modal-overlay {
     position: fixed;
