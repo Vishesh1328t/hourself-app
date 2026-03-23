@@ -1,4 +1,84 @@
 document.addEventListener('DOMContentLoaded', () => {
+
+    // ---- Auth State & UI Elements ----
+    let cachedToken = localStorage.getItem('hourself_token') || null;
+    let isRegisterMode = false;
+
+    const authOverlay = document.getElementById('auth-overlay');
+    const authForm = document.getElementById('auth-form');
+    const authEmail = document.getElementById('auth-email');
+    const authPassword = document.getElementById('auth-password');
+    const authSubmitBtn = document.getElementById('auth-submit-btn');
+    const authSwitchBtn = document.getElementById('auth-switch-btn');
+    const authSwitchText = document.getElementById('auth-switch-text');
+    const authErrorMsg = document.getElementById('auth-error-msg');
+    
+    function requireAuth() {
+        authOverlay.classList.add('active');
+        cachedToken = null;
+        localStorage.removeItem('hourself_token');
+        monthDataCache = {};
+        calendarDays.innerHTML = '';
+        currentMonthYear.innerText = 'Sign in required';
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            isRunning = false;
+            btnStart.disabled = false;
+            btnPause.disabled = true;
+        }
+    }
+
+    authSwitchBtn.addEventListener('click', () => {
+        isRegisterMode = !isRegisterMode;
+        authSubmitBtn.innerText = isRegisterMode ? "Create Account" : "Login";
+        authSwitchText.innerText = isRegisterMode ? "Already have an account?" : "New to HourSelf?";
+        authSwitchBtn.innerText = isRegisterMode ? "Sign in" : "Create Account";
+        authErrorMsg.classList.add('hidden');
+    });
+
+    authForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
+        
+        authSubmitBtn.innerText = "Please wait...";
+        authSubmitBtn.disabled = true;
+
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: authEmail.value, password: authPassword.value })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                authErrorMsg.innerText = data.error || 'Authentication failed';
+                authErrorMsg.classList.remove('hidden');
+            } else {
+                cachedToken = data.token;
+                localStorage.setItem('hourself_token', data.token);
+                authOverlay.classList.remove('active');
+                authErrorMsg.classList.add('hidden');
+                
+                authEmail.value = '';
+                authPassword.value = '';
+
+                // Load user data seamlessly
+                renderCalendar();
+            }
+        } catch (err) {
+            authErrorMsg.innerText = 'Network error occurred.';
+            authErrorMsg.classList.remove('hidden');
+        } finally {
+            authSubmitBtn.disabled = false;
+            authSubmitBtn.innerText = isRegisterMode ? "Create Account" : "Login";
+        }
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+        requireAuth();
+    });
+
     // ---- Calendar ----
     const currentDate = new Date();
     let currentMonth = currentDate.getMonth();
@@ -15,12 +95,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let isMonthDataLoaded = false;
 
     // ---- API Helpers ----
+    function getAuthHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cachedToken}`
+        };
+    }
+
+    async function handleApiRes(res) {
+        if (res.status === 401 || res.status === 403) {
+            requireAuth();
+            throw new Error('Unauthorized');
+        }
+        if (!res.ok) throw new Error('Network error');
+        return await res.json();
+    }
+
     async function fetchMonthData(year, month) {
         try {
+            if (!cachedToken) return {};
             const yearMonth = `${year}-${(month+1).toString().padStart(2, '0')}`;
-            const res = await fetch(`/api/month/${yearMonth}`);
-            if (!res.ok) throw new Error('Network error');
-            return await res.json();
+            const res = await fetch(`/api/month/${yearMonth}`, { headers: getAuthHeaders() });
+            return await handleApiRes(res);
         } catch (err) {
             console.error(err);
             return {};
@@ -29,9 +125,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchDayData(dateStr) {
         try {
-            const res = await fetch(`/api/day/${dateStr}`);
-            if (!res.ok) throw new Error('Network error');
-            return await res.json();
+            if (!cachedToken) return { hours: {}, prodScore: 0 };
+            const res = await fetch(`/api/day/${dateStr}`, { headers: getAuthHeaders() });
+            return await handleApiRes(res);
         } catch (err) {
             console.error(err);
             return { hours: {}, prodScore: 0 };
@@ -40,31 +136,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function saveDayHours(dateStr, hours) {
         try {
-            await fetch(`/api/dayData/${dateStr}`, {
+            if (!cachedToken) return;
+            const res = await fetch(`/api/dayData/${dateStr}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ hours })
             });
-            renderCalendar(true); // pass true to update badges seamlessly
+            await handleApiRes(res);
+            renderCalendar(true); 
         } catch (err) { console.error(err); }
     }
 
     async function saveDayProdScore(dateStr, prodScore) {
         try {
-            await fetch(`/api/dayScore/${dateStr}`, {
+            if (!cachedToken) return;
+            const res = await fetch(`/api/dayScore/${dateStr}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ prodScore })
             });
+            await handleApiRes(res);
             renderCalendar(true);
         } catch (err) { console.error(err); }
     }
 
-    // Mapping for fast badge updates without destroying the calendar grid
     let _dayDivMap = {};
 
     // ---- Render Calendar Grid ----
     function renderCalendar(onlyUpdateBadges = false) {
+        if (!cachedToken) return;
         const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
         if (!onlyUpdateBadges) {
@@ -73,7 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const firstDay = new Date(currentYear, currentMonth, 1).getDay();
             
-            // Render empty slots 
             for (let i = 0; i < firstDay; i++) {
                 const emptyDiv = document.createElement('div');
                 emptyDiv.classList.add('calendar-day', 'empty');
@@ -82,7 +181,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             _dayDivMap = {};
 
-            // Render month days instantly
             for (let i = 1; i <= daysInMonth; i++) {
                 const dayDiv = document.createElement('div');
                 dayDiv.classList.add('calendar-day');
@@ -98,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const dateStr = `${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
                 
-                // Add subtle loading spinner inside the day
                 const loader = document.createElement('div');
                 loader.classList.add('day-stats-loader');
                 loader.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin" style="font-size: 0.8rem; color: var(--text-muted); opacity: 0.5;"></i>';
@@ -109,14 +206,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 calendarDays.appendChild(dayDiv);
-                
                 _dayDivMap[dateStr] = { div: dayDiv, loader };
             }
             
-            // Fetch background data from our MongoDB Express API WITHOUT blocking UI
             isMonthDataLoaded = false;
             fetchMonthData(currentYear, currentMonth).then(monthData => {
-                // Merge data carefully so we don't overwrite user's instant edits
                 for (const [dateKey, payload] of Object.entries(monthData)) {
                     if (!monthDataCache[dateKey]) {
                         monthDataCache[dateKey] = payload;
@@ -124,7 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 isMonthDataLoaded = true;
 
-                // Dynamically populate modal if it was opened before load finished
                 if (activeDateStr && activeDateStr.startsWith(`${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}`)) {
                     populateActiveModal(monthDataCache[activeDateStr]);
                 }
@@ -142,9 +235,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const cell = _dayDivMap[dateStr];
             if (!cell) continue;
 
-            if (cell.loader) cell.loader.remove(); // clear loading spinner
+            if (cell.loader) cell.loader.remove();
 
-            // clear existing stats explicitly before replacing
             const existingStats = cell.div.querySelector('.day-stats');
             if (existingStats) existingStats.remove();
 
@@ -182,14 +274,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Navigation
     document.getElementById('prev-month').addEventListener('click', () => {
+        if (!cachedToken) return;
         currentMonth--;
         if (currentMonth < 0) { currentMonth = 11; currentYear--; }
         renderCalendar();
     });
     
     document.getElementById('next-month').addEventListener('click', () => {
+        if (!cachedToken) return;
         currentMonth++;
         if (currentMonth > 11) { currentMonth = 0; currentYear++; }
         renderCalendar();
@@ -212,13 +305,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function populateActiveModal(dayRecord) {
         if (!dayRecord) return;
-        // Update score only if it hasn't locally diverged
         refreshProdScoreDisplay(dayRecord.prodScore || activeScore);
         
         const dayHours = dayRecord.hours || {};
         for (let i = 0; i < 24; i++) {
             const textarea = document.getElementById(`hour-input-${i}`);
-            // Smooth optimistic repopulation: only fill if user hasn't already typed
             if (textarea && textarea.value.trim() === '' && dayHours[i]) {
                 textarea.value = dayHours[i];
             }
@@ -230,10 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
         modalDateTitle.innerText = `${monthName} ${dayIndex}, ${currentYear}`;
         dailyModal.classList.add('active');
         
-        // UNCONDITIONALLY RENDER THE MODAL INSTANTLY
         renderModalContent(dateStr);
 
-        // If the background API call hasn't returned yet, fetch specifically for safety
         if (!isMonthDataLoaded && !monthDataCache[dateStr]) {
             fetchDayData(dateStr).then(dayRecord => {
                 if (activeDateStr === dateStr) {
@@ -251,7 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
         hourlyList.innerHTML = '';
         const dayHours = dayRecord.hours || {};
         
-        // Generate 24 hours (12 AM to 11 PM)
         for (let i = 0; i < 24; i++) {
             const displayHour = i === 0 ? 12 : (i > 12 ? i - 12 : i);
             const ampm = i < 12 ? 'AM' : 'PM';
@@ -265,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
             label.innerText = hourLabel;
             
             const textarea = document.createElement('textarea');
-            textarea.id = `hour-input-${i}`; // ADD ID FOR REACTIVE UPDATES
+            textarea.id = `hour-input-${i}`; 
             textarea.classList.add('hour-input');
             textarea.placeholder = `What did you do at ${hourLabel}?`;
             textarea.value = dayHours[i] || ''; 
@@ -301,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     closeModalBtn.addEventListener('click', () => {
         dailyModal.classList.remove('active');
-        activeDateStr = null; // Important context wipe
+        activeDateStr = null; 
     });
 
     dailyModal.addEventListener('click', (e) => {
@@ -362,16 +450,14 @@ document.addEventListener('DOMContentLoaded', () => {
             timeRemaining--;
             updateDisplay(timeRemaining);
         } else {
-            // Auto increment Pomodoro to DB if we were focusing
-            if (isFocusMode) {
+            // Auto increment Pomodoro to DB if focusing and logged in
+            if (isFocusMode && cachedToken) {
                 const todayStr = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${currentDate.getDate().toString().padStart(2, '0')}`;
                 
-                // Keep local cache completely synced
                 if (!monthDataCache[todayStr]) monthDataCache[todayStr] = { hours: {}, prodScore: 0 };
                 monthDataCache[todayStr].prodScore += 1;
                 
                 const updatedScore = monthDataCache[todayStr].prodScore;
-                
                 saveDayProdScore(todayStr, updatedScore);
                 
                 if (activeDateStr === todayStr) {
@@ -422,5 +508,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ---- Initialization ----
     updateDisplay(timeRemaining);
-    renderCalendar();
+    if (!cachedToken) {
+        authOverlay.classList.add('active');
+    } else {
+        renderCalendar();
+    }
 });
