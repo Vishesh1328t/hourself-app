@@ -39,7 +39,18 @@ const daySchema = new mongoose.Schema({
 daySchema.index({ userId: 1, dateStr: 1 }, { unique: true });
 const DayRecord = mongoose.model('DayRecord', daySchema);
 
-// ---- Auth Middleware ----
+// ---- Auth Middleware & DB Safeguards ----
+function checkDBConnection(req, res, next) {
+    // If Mongoose is disconnected (0) or still explicitly trying to connect to a broken/local URI without resolution
+    if (mongoose.connection.readyState === 0) {
+        return res.status(500).json({ error: 'Database disconnected. Please verify your MONGODB_URI in Vercel settings.' });
+    }
+    next();
+}
+
+// Ensure all API calls verify connection first to prevent 10s timeout hangs
+app.use('/api', checkDBConnection);
+
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer TOKEN"
@@ -73,7 +84,8 @@ app.post('/api/auth/register', async (req, res) => {
         const token = jwt.sign({ userId: newUser._id }, JWT_SECRET, { expiresIn: '30d' });
         res.json({ token, message: 'Account created successfully!' });
     } catch (err) {
-        res.status(500).json({ error: 'Registration failed entirely' });
+        console.error('Registration error:', err);
+        res.status(500).json({ error: err.message || 'Registration failed entirely' });
     }
 });
 
@@ -90,7 +102,8 @@ app.post('/api/auth/login', async (req, res) => {
         const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '30d' });
         res.json({ token, message: 'Logged in successfully!' });
     } catch (err) {
-        res.status(500).json({ error: 'Login protocol failed' });
+        console.error('Login error:', err);
+        res.status(500).json({ error: err.message || 'Login protocol failed' });
     }
 });
 
