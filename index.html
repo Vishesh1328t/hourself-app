@@ -40,7 +40,6 @@
 
             <div class="quote-container">
                 <p>"Focus on being productive instead of busy."</p>
-                <button id="btn-logout" class="btn-link" style="color: var(--text-muted); font-size: 0.8rem; margin-top: 1rem;"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</button>
             </div>
         </aside>
 
@@ -89,27 +88,7 @@
         </div>
     </div>
 
-    <!-- Authentication Overlay -->
-    <div class="auth-overlay" id="auth-overlay">
-        <div class="auth-container glass-panel">
-            <h1 class="logo auth-logo"><i class="fa-solid fa-hourglass-half"></i> HourSelf</h1>
-            <p class="auth-subtitle">Sign in to sync your productivity securely.</p>
-            
-            <div id="auth-error-msg" class="auth-error hidden"></div>
-
-            <form id="auth-form" class="auth-form">
-                <input type="email" id="auth-email" placeholder="Email Address" required>
-                <input type="password" id="auth-password" placeholder="Password" required>
-                <button type="submit" id="auth-submit-btn" class="btn primary">Login</button>
-            </form>
-
-            <div class="auth-switch">
-                <span id="auth-switch-text">New to HourSelf?</span> 
-                <button type="button" id="auth-switch-btn" class="btn-link">Create Account</button>
-            </div>
-        </div>
-    </div>
-
+    <!-- Authentication Overlay Removed -->
     <script src="app.js"></script>
 </body>
 </html>

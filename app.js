@@ -1,84 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-
-    // ---- Auth State & UI Elements ----
-    let cachedToken = localStorage.getItem('hourself_token') || null;
-    let isRegisterMode = false;
-
-    const authOverlay = document.getElementById('auth-overlay');
-    const authForm = document.getElementById('auth-form');
-    const authEmail = document.getElementById('auth-email');
-    const authPassword = document.getElementById('auth-password');
-    const authSubmitBtn = document.getElementById('auth-submit-btn');
-    const authSwitchBtn = document.getElementById('auth-switch-btn');
-    const authSwitchText = document.getElementById('auth-switch-text');
-    const authErrorMsg = document.getElementById('auth-error-msg');
-    
-    function requireAuth() {
-        authOverlay.classList.add('active');
-        cachedToken = null;
-        localStorage.removeItem('hourself_token');
-        monthDataCache = {};
-        calendarDays.innerHTML = '';
-        currentMonthYear.innerText = 'Sign in required';
-        if (timerInterval) {
-            clearInterval(timerInterval);
-            isRunning = false;
-            btnStart.disabled = false;
-            btnPause.disabled = true;
-        }
-    }
-
-    authSwitchBtn.addEventListener('click', () => {
-        isRegisterMode = !isRegisterMode;
-        authSubmitBtn.innerText = isRegisterMode ? "Create Account" : "Login";
-        authSwitchText.innerText = isRegisterMode ? "Already have an account?" : "New to HourSelf?";
-        authSwitchBtn.innerText = isRegisterMode ? "Sign in" : "Create Account";
-        authErrorMsg.classList.add('hidden');
-    });
-
-    authForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
-        
-        authSubmitBtn.innerText = "Please wait...";
-        authSubmitBtn.disabled = true;
-
-        try {
-            const res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: authEmail.value, password: authPassword.value })
-            });
-            const data = await res.json();
-
-            if (!res.ok) {
-                authErrorMsg.innerText = data.error || 'Authentication failed';
-                authErrorMsg.classList.remove('hidden');
-            } else {
-                cachedToken = data.token;
-                localStorage.setItem('hourself_token', data.token);
-                authOverlay.classList.remove('active');
-                authErrorMsg.classList.add('hidden');
-                
-                authEmail.value = '';
-                authPassword.value = '';
-
-                // Load user data seamlessly
-                renderCalendar();
-            }
-        } catch (err) {
-            authErrorMsg.innerText = 'Network error occurred.';
-            authErrorMsg.classList.remove('hidden');
-        } finally {
-            authSubmitBtn.disabled = false;
-            authSubmitBtn.innerText = isRegisterMode ? "Create Account" : "Login";
-        }
-    });
-
-    document.getElementById('btn-logout').addEventListener('click', () => {
-        requireAuth();
-    });
-
     // ---- Calendar ----
     const currentDate = new Date();
     let currentMonth = currentDate.getMonth();
@@ -95,28 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let isMonthDataLoaded = false;
 
     // ---- API Helpers ----
-    function getAuthHeaders() {
-        return {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cachedToken}`
-        };
-    }
-
-    async function handleApiRes(res) {
-        if (res.status === 401 || res.status === 403) {
-            requireAuth();
-            throw new Error('Unauthorized');
-        }
-        if (!res.ok) throw new Error('Network error');
-        return await res.json();
-    }
-
     async function fetchMonthData(year, month) {
         try {
-            if (!cachedToken) return {};
             const yearMonth = `${year}-${(month+1).toString().padStart(2, '0')}`;
-            const res = await fetch(`/api/month/${yearMonth}`, { headers: getAuthHeaders() });
-            return await handleApiRes(res);
+            const res = await fetch(`/api/month/${yearMonth}`);
+            if (!res.ok) throw new Error('Network error');
+            return await res.json();
         } catch (err) {
             console.error(err);
             return {};
@@ -125,9 +29,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchDayData(dateStr) {
         try {
-            if (!cachedToken) return { hours: {}, prodScore: 0 };
-            const res = await fetch(`/api/day/${dateStr}`, { headers: getAuthHeaders() });
-            return await handleApiRes(res);
+            const res = await fetch(`/api/day/${dateStr}`);
+            if (!res.ok) throw new Error('Network error');
+            return await res.json();
         } catch (err) {
             console.error(err);
             return { hours: {}, prodScore: 0 };
@@ -136,26 +40,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function saveDayHours(dateStr, hours) {
         try {
-            if (!cachedToken) return;
-            const res = await fetch(`/api/dayData/${dateStr}`, {
+            await fetch(`/api/dayData/${dateStr}`, {
                 method: 'POST',
-                headers: getAuthHeaders(),
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ hours })
             });
-            await handleApiRes(res);
             renderCalendar(true); 
         } catch (err) { console.error(err); }
     }
 
     async function saveDayProdScore(dateStr, prodScore) {
         try {
-            if (!cachedToken) return;
-            const res = await fetch(`/api/dayScore/${dateStr}`, {
+            await fetch(`/api/dayScore/${dateStr}`, {
                 method: 'POST',
-                headers: getAuthHeaders(),
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prodScore })
             });
-            await handleApiRes(res);
             renderCalendar(true);
         } catch (err) { console.error(err); }
     }
@@ -164,7 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Render Calendar Grid ----
     function renderCalendar(onlyUpdateBadges = false) {
-        if (!cachedToken) return;
         const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
         if (!onlyUpdateBadges) {
@@ -275,14 +174,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     document.getElementById('prev-month').addEventListener('click', () => {
-        if (!cachedToken) return;
         currentMonth--;
         if (currentMonth < 0) { currentMonth = 11; currentYear--; }
         renderCalendar();
     });
     
     document.getElementById('next-month').addEventListener('click', () => {
-        if (!cachedToken) return;
         currentMonth++;
         if (currentMonth > 11) { currentMonth = 0; currentYear++; }
         renderCalendar();
@@ -450,8 +347,8 @@ document.addEventListener('DOMContentLoaded', () => {
             timeRemaining--;
             updateDisplay(timeRemaining);
         } else {
-            // Auto increment Pomodoro to DB if focusing and logged in
-            if (isFocusMode && cachedToken) {
+            // Auto increment Pomodoro to DB if focusing
+            if (isFocusMode) {
                 const todayStr = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${currentDate.getDate().toString().padStart(2, '0')}`;
                 
                 if (!monthDataCache[todayStr]) monthDataCache[todayStr] = { hours: {}, prodScore: 0 };
@@ -508,9 +405,5 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ---- Initialization ----
     updateDisplay(timeRemaining);
-    if (!cachedToken) {
-        authOverlay.classList.add('active');
-    } else {
-        renderCalendar();
-    }
+    renderCalendar();
 });
