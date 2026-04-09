@@ -10,54 +10,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const calendarDays = document.getElementById('calendar-days');
     const currentMonthYear = document.getElementById('current-month-year');
     
-    // ---- Global State ----
-    let monthDataCache = {};
-    let isMonthDataLoaded = false;
+    // ---- Global State (Local File System / Storage) ----
+    
+    function getStoredData() {
+        if (window.api) return window.api.loadData();
+        return JSON.parse(localStorage.getItem('hourself_native_data')) || {};
+    }
 
-    // ---- API Helpers ----
-    async function fetchMonthData(year, month) {
-        try {
-            const yearMonth = `${year}-${(month+1).toString().padStart(2, '0')}`;
-            const res = await fetch(`/api/month/${yearMonth}`);
-            if (!res.ok) throw new Error('Network error');
-            return await res.json();
-        } catch (err) {
-            console.error(err);
-            return {};
+    function saveStoredData(data) {
+        if (window.api) {
+            window.api.saveData(data);
+        } else {
+            localStorage.setItem('hourself_native_data', JSON.stringify(data));
         }
     }
 
-    async function fetchDayData(dateStr) {
-        try {
-            const res = await fetch(`/api/day/${dateStr}`);
-            if (!res.ok) throw new Error('Network error');
-            return await res.json();
-        } catch (err) {
-            console.error(err);
-            return { hours: {}, prodScore: 0 };
-        }
+    // ---- Data Helpers ----
+    function saveDayHours(dateStr, hours) {
+        const data = getStoredData();
+        if (!data[dateStr]) data[dateStr] = { hours: {}, prodScore: 0 };
+        data[dateStr].hours = hours;
+        saveStoredData(data);
+        renderCalendar(true); 
     }
 
-    async function saveDayHours(dateStr, hours) {
-        try {
-            await fetch(`/api/dayData/${dateStr}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hours })
-            });
-            renderCalendar(true); 
-        } catch (err) { console.error(err); }
-    }
-
-    async function saveDayProdScore(dateStr, prodScore) {
-        try {
-            await fetch(`/api/dayScore/${dateStr}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prodScore })
-            });
-            renderCalendar(true);
-        } catch (err) { console.error(err); }
+    function saveDayProdScore(dateStr, prodScore) {
+        const data = getStoredData();
+        if (!data[dateStr]) data[dateStr] = { hours: {}, prodScore: 0 };
+        data[dateStr].prodScore = prodScore;
+        saveStoredData(data);
+        renderCalendar(true);
     }
 
     let _dayDivMap = {};
@@ -65,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Render Calendar Grid ----
     function renderCalendar(onlyUpdateBadges = false) {
         const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const data = getStoredData();
 
         if (!onlyUpdateBadges) {
             currentMonthYear.innerText = `${monthNames[currentMonth]} ${currentYear}`;
@@ -95,51 +78,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const dateStr = `${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
                 
-                const loader = document.createElement('div');
-                loader.classList.add('day-stats-loader');
-                loader.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin" style="font-size: 0.8rem; color: var(--text-muted); opacity: 0.5;"></i>';
-                dayDiv.appendChild(loader);
-
                 dayDiv.addEventListener('click', () => {
                     openDailyModal(dateStr, i, monthNames[currentMonth]);
                 });
                 
                 calendarDays.appendChild(dayDiv);
-                _dayDivMap[dateStr] = { div: dayDiv, loader };
+                _dayDivMap[dateStr] = { div: dayDiv };
             }
             
-            isMonthDataLoaded = false;
-            fetchMonthData(currentYear, currentMonth).then(monthData => {
-                for (const [dateKey, payload] of Object.entries(monthData)) {
-                    if (!monthDataCache[dateKey]) {
-                        monthDataCache[dateKey] = payload;
-                    }
-                }
-                isMonthDataLoaded = true;
-
-                if (activeDateStr && activeDateStr.startsWith(`${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}`)) {
-                    populateActiveModal(monthDataCache[activeDateStr]);
-                }
-
-                updateCalendarBadges(daysInMonth);
-            });
+            updateCalendarBadges(daysInMonth, data);
         } else {
-            updateCalendarBadges(daysInMonth);
+            updateCalendarBadges(daysInMonth, data);
         }
     }
 
-    function updateCalendarBadges(daysInMonth) {
+    function updateCalendarBadges(daysInMonth, allData) {
         for (let i = 1; i <= daysInMonth; i++) {
             const dateStr = `${currentYear}-${(currentMonth+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
             const cell = _dayDivMap[dateStr];
             if (!cell) continue;
 
-            if (cell.loader) cell.loader.remove();
+            const loader = cell.div.querySelector('.day-stats-loader');
+            if (loader) loader.remove();
 
             const existingStats = cell.div.querySelector('.day-stats');
             if (existingStats) existingStats.remove();
 
-            const dayInfo = monthDataCache[dateStr] || { hours: {}, prodScore: 0 };
+            const dayInfo = allData[dateStr] || { hours: {}, prodScore: 0 };
             
             let filledCount = 0;
             if (dayInfo.hours) {
@@ -199,19 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
         activeScore = score || 0;
         prodScoreCounter.innerText = activeScore;
     }
-    
-    function populateActiveModal(dayRecord) {
-        if (!dayRecord) return;
-        refreshProdScoreDisplay(dayRecord.prodScore || activeScore);
-        
-        const dayHours = dayRecord.hours || {};
-        for (let i = 0; i < 24; i++) {
-            const textarea = document.getElementById(`hour-input-${i}`);
-            if (textarea && textarea.value.trim() === '' && dayHours[i]) {
-                textarea.value = dayHours[i];
-            }
-        }
-    }
 
     function openDailyModal(dateStr, dayIndex, monthName) {
         activeDateStr = dateStr;
@@ -219,19 +171,11 @@ document.addEventListener('DOMContentLoaded', () => {
         dailyModal.classList.add('active');
         
         renderModalContent(dateStr);
-
-        if (!isMonthDataLoaded && !monthDataCache[dateStr]) {
-            fetchDayData(dateStr).then(dayRecord => {
-                if (activeDateStr === dateStr) {
-                    monthDataCache[dateStr] = dayRecord;
-                    populateActiveModal(dayRecord);
-                }
-            });
-        }
     }
     
     function renderModalContent(dateStr) {
-        const dayRecord = monthDataCache[dateStr] || { hours: {}, prodScore: 0 };
+        const data = getStoredData();
+        const dayRecord = data[dateStr] || { hours: {}, prodScore: 0 };
         refreshProdScoreDisplay(dayRecord.prodScore);
         
         hourlyList.innerHTML = '';
@@ -258,12 +202,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let timeoutId;
             textarea.addEventListener('input', (e) => {
                 const updatedVal = e.target.value;
-                if (!monthDataCache[dateStr]) monthDataCache[dateStr] = { hours: {}, prodScore: activeScore };
-                monthDataCache[dateStr].hours[i] = updatedVal;
+                dayHours[i] = updatedVal;
                 
                 clearTimeout(timeoutId);
                 timeoutId = setTimeout(() => {
-                    saveDayHours(dateStr, monthDataCache[dateStr].hours);
+                    saveDayHours(dateStr, dayHours);
                 }, 800);
             });
             
@@ -347,19 +290,20 @@ document.addEventListener('DOMContentLoaded', () => {
             timeRemaining--;
             updateDisplay(timeRemaining);
         } else {
-            // Auto increment Pomodoro to DB if focusing
             if (isFocusMode) {
                 const todayStr = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${currentDate.getDate().toString().padStart(2, '0')}`;
                 
-                if (!monthDataCache[todayStr]) monthDataCache[todayStr] = { hours: {}, prodScore: 0 };
-                monthDataCache[todayStr].prodScore += 1;
+                const data = getStoredData();
+                if (!data[todayStr]) data[todayStr] = { hours: {}, prodScore: 0 };
+                data[todayStr].prodScore += 1;
                 
-                const updatedScore = monthDataCache[todayStr].prodScore;
-                saveDayProdScore(todayStr, updatedScore);
+                saveStoredData(data);
                 
+                const updatedScore = data[todayStr].prodScore;
                 if (activeDateStr === todayStr) {
                     refreshProdScoreDisplay(updatedScore); 
                 }
+                renderCalendar();
             }
             
             isFocusMode = !isFocusMode;

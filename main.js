@@ -1,7 +1,6 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-// Import and boot up our local Express Server dynamically
-require('./server'); 
+const fs = require('fs');
 
 let mainWindow;
 
@@ -15,14 +14,13 @@ function createWindow() {
         backgroundColor: '#0a0a0f',
         webPreferences: {
             nodeIntegration: false,
-            contextIsolation: true
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js')
         }
     });
 
-    // Wait 1 second for Express to formally bind to port 3000, then load the UI
-    setTimeout(() => {
-        mainWindow.loadURL('http://localhost:3000');
-    }, 1000);
+    // Load the HTML natively without any backend logic
+    mainWindow.loadFile('index.html');
 
     // Smooth exact window appearance
     mainWindow.once('ready-to-show', () => {
@@ -31,6 +29,29 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    const dataPath = path.join(app.getPath('userData'), 'hourself_data.json');
+
+    ipcMain.on('load-data', (event) => {
+        try {
+            if (fs.existsSync(dataPath)) {
+                event.returnValue = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+            } else {
+                event.returnValue = {};
+            }
+        } catch (error) {
+            console.error('Error loading data:', error);
+            event.returnValue = {};
+        }
+    });
+
+    ipcMain.on('save-data', (event, data) => {
+        try {
+            fs.writeFileSync(dataPath, JSON.stringify(data));
+        } catch (error) {
+            console.error('Error saving data:', error);
+        }
+    });
+
     createWindow();
 
     app.on('activate', () => {
@@ -41,7 +62,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-    // Standard macOS behavior: keep process running in dock even if window is closed
     if (process.platform !== 'darwin') {
         app.quit();
     }
