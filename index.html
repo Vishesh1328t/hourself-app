@@ -77,22 +77,48 @@
         </main>
     </div>
 
-    <!-- Daily Hourly View Modal -->
+    <!-- Daily Planner Modal -->
     <div class="modal-overlay" id="daily-modal">
         <div class="modal-content glass-panel">
             <div class="modal-header">
                 <div class="modal-title-group">
                     <h2 id="modal-date-title">Date</h2>
-                    <div class="productivity-counter" title="Productivity Score (Auto-increments after Focus time)">
+                    <div class="productivity-counter" title="Focus Sessions completed (Auto-increments after Focus time)">
                         <button id="prod-minus" class="icon-btn-small" title="Decrease score"><i class="fa-solid fa-minus"></i></button>
-                        <span id="prod-score" class="score-display">0</span> <i class="fa-solid fa-fire fire-icon"></i>
+                        <span id="prod-score" class="score-display">0</span> <i class="fa-solid fa-stopwatch fire-icon"></i>
                         <button id="prod-plus" class="icon-btn-small" title="Increase score"><i class="fa-solid fa-plus"></i></button>
                     </div>
                 </div>
                 <button id="close-modal" class="icon-btn" title="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="hourly-list" id="hourly-list">
-                <!-- Hourly rows dynamically injected: 12 AM to 11 PM -->
+            
+            <!-- Daily Stats Analysis Panel -->
+            <div class="modal-stats-panel">
+                <div class="stat-card">
+                    <span class="stat-label">Tasks Done</span>
+                    <span id="stat-tasks-done" class="stat-value">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Tasks To Do</span>
+                    <span id="stat-tasks-todo" class="stat-value">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Focus Sessions</span>
+                    <span id="stat-focus-sessions" class="stat-value">0</span>
+                </div>
+            </div>
+
+            <!-- To-Do Input & List -->
+            <div class="todo-section">
+                <div class="todo-input-wrapper">
+                    <input type="text" id="todo-input" placeholder="Add a task for today..." autocomplete="off">
+                    <button id="btn-add-todo" class="btn primary"><i class="fa-solid fa-plus"></i> Add</button>
+                </div>
+                <div class="todo-list-container">
+                    <ul id="todo-list" class="todo-list">
+                        <!-- Dynamic items -->
+                    </ul>
+                </div>
             </div>
         </div>
     </div>

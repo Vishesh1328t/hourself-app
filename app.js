@@ -10,10 +10,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const calendarDays = document.getElementById('calendar-days');
     const currentMonthYear = document.getElementById('current-month-year');
     
-    // ---- Global State (Local Storage) ----
+    // ---- Global State (Local Storage) & Migration ----
     
     function getStoredData() {
-        return JSON.parse(localStorage.getItem('hourself_native_data')) || {};
+        const raw = JSON.parse(localStorage.getItem('hourself_native_data')) || {};
+        let migrated = false;
+        
+        for (const dateStr in raw) {
+            const entry = raw[dateStr];
+            
+            // Migrate hourly logs to todo list
+            if (entry.hours && !entry.todos) {
+                entry.todos = [];
+                for (const hourIndex in entry.hours) {
+                    const hourText = entry.hours[hourIndex];
+                    if (hourText && hourText.trim() !== '') {
+                        const ampm = hourIndex < 12 ? 'AM' : 'PM';
+                        const displayHour = hourIndex == 0 ? 12 : (hourIndex > 12 ? hourIndex - 12 : hourIndex);
+                        const label = `${displayHour} ${ampm}`;
+                        entry.todos.push({
+                            id: `migrated_${hourIndex}_${Date.now()}`,
+                            text: `[${label}] ${hourText}`,
+                            done: true
+                        });
+                    }
+                }
+                delete entry.hours;
+                migrated = true;
+            }
+
+            // Migrate prodScore to focusSessions
+            if (entry.prodScore !== undefined && entry.focusSessions === undefined) {
+                entry.focusSessions = entry.prodScore;
+                delete entry.prodScore;
+                migrated = true;
+            }
+        }
+        
+        if (migrated) {
+            localStorage.setItem('hourself_native_data', JSON.stringify(raw));
+        }
+        
+        return raw;
     }
 
     function saveStoredData(data) {
@@ -21,18 +59,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- Data Helpers ----
-    function saveDayHours(dateStr, hours) {
+    function saveDayTodos(dateStr, todos) {
         const data = getStoredData();
-        if (!data[dateStr]) data[dateStr] = { hours: {}, prodScore: 0 };
-        data[dateStr].hours = hours;
+        if (!data[dateStr]) data[dateStr] = { todos: [], focusSessions: 0 };
+        data[dateStr].todos = todos;
         saveStoredData(data);
         renderCalendar(true); 
     }
 
-    function saveDayProdScore(dateStr, prodScore) {
+    function saveDayFocusSessions(dateStr, focusSessions) {
         const data = getStoredData();
-        if (!data[dateStr]) data[dateStr] = { hours: {}, prodScore: 0 };
-        data[dateStr].prodScore = prodScore;
+        if (!data[dateStr]) data[dateStr] = { todos: [], focusSessions: 0 };
+        data[dateStr].focusSessions = focusSessions;
         saveStoredData(data);
         renderCalendar(true);
     }
@@ -99,32 +137,28 @@ document.addEventListener('DOMContentLoaded', () => {
             const existingStats = cell.div.querySelector('.day-stats');
             if (existingStats) existingStats.remove();
 
-            const dayInfo = allData[dateStr] || { hours: {}, prodScore: 0 };
+            const dayInfo = allData[dateStr] || { todos: [], focusSessions: 0 };
             
-            let filledCount = 0;
-            if (dayInfo.hours) {
-                Object.values(dayInfo.hours).forEach(val => { 
-                    if(val && val.trim() !== '') filledCount++; 
-                });
-            }
+            const todos = dayInfo.todos || [];
+            const focusSessions = dayInfo.focusSessions || 0;
+            const totalTasks = todos.length;
+            const completedTasks = todos.filter(t => t.done).length;
             
-            const prodScore = dayInfo.prodScore || 0;
-            
-            if (filledCount > 0 || prodScore > 0) {
+            if (totalTasks > 0 || focusSessions > 0) {
                 const statsContainer = document.createElement('div');
                 statsContainer.classList.add('day-stats');
                 
-                if (filledCount > 0) {
+                if (totalTasks > 0) {
                     const preview = document.createElement('div');
                     preview.classList.add('day-badge');
-                    preview.innerText = `${filledCount} hr${filledCount > 1 ? 's' : ''}`;
+                    preview.innerText = `${completedTasks}/${totalTasks} done`;
                     statsContainer.appendChild(preview);
                 }
                 
-                if (prodScore > 0) {
+                if (focusSessions > 0) {
                     const fire = document.createElement('div');
                     fire.classList.add('day-badge', 'fire');
-                    fire.innerHTML = `${prodScore} <i class="fa-solid fa-fire"></i>`;
+                    fire.innerHTML = `${focusSessions} <i class="fa-solid fa-stopwatch"></i>`;
                     statsContainer.appendChild(fire);
                 }
                 
@@ -145,19 +179,27 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCalendar();
     });
 
-    // ---- Daily Hourly Tracker Modal ----
+    // ---- Daily Planner Modal ----
     const dailyModal = document.getElementById('daily-modal');
     const closeModalBtn = document.getElementById('close-modal');
     const modalDateTitle = document.getElementById('modal-date-title');
-    const hourlyList = document.getElementById('hourly-list');
     const prodScoreCounter = document.getElementById('prod-score');
     
+    const statTasksDone = document.getElementById('stat-tasks-done');
+    const statTasksTodo = document.getElementById('stat-tasks-todo');
+    const statFocusSessions = document.getElementById('stat-focus-sessions');
+    
+    const todoInput = document.getElementById('todo-input');
+    const btnAddTodo = document.getElementById('btn-add-todo');
+    const todoList = document.getElementById('todo-list');
+    
     let activeDateStr = null;
-    let activeScore = 0;
+    let activeFocusSessions = 0;
 
-    function refreshProdScoreDisplay(score) {
-        activeScore = score || 0;
-        prodScoreCounter.innerText = activeScore;
+    function refreshFocusSessionsDisplay(count) {
+        activeFocusSessions = count || 0;
+        prodScoreCounter.innerText = activeFocusSessions;
+        statFocusSessions.innerText = activeFocusSessions;
     }
 
     function openDailyModal(dateStr, dayIndex, monthName) {
@@ -170,57 +212,80 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function renderModalContent(dateStr) {
         const data = getStoredData();
-        const dayRecord = data[dateStr] || { hours: {}, prodScore: 0 };
-        refreshProdScoreDisplay(dayRecord.prodScore);
+        const dayRecord = data[dateStr] || { todos: [], focusSessions: 0 };
         
-        hourlyList.innerHTML = '';
-        const dayHours = dayRecord.hours || {};
+        const todos = dayRecord.todos || [];
+        refreshFocusSessionsDisplay(dayRecord.focusSessions);
         
-        for (let i = 0; i < 24; i++) {
-            const displayHour = i === 0 ? 12 : (i > 12 ? i - 12 : i);
-            const ampm = i < 12 ? 'AM' : 'PM';
-            const hourLabel = `${displayHour} ${ampm}`;
+        const totalTasks = todos.length;
+        const completedTasks = todos.filter(t => t.done).length;
+        const pendingTasks = totalTasks - completedTasks;
+        
+        statTasksDone.innerText = completedTasks;
+        statTasksTodo.innerText = pendingTasks;
+        
+        todoList.innerHTML = '';
+        
+        todos.forEach(todo => {
+            const li = document.createElement('li');
+            li.classList.add('todo-item');
+            if (todo.done) li.classList.add('completed');
             
-            const row = document.createElement('div');
-            row.classList.add('hour-row');
-            
-            const label = document.createElement('div');
-            label.classList.add('hour-label');
-            label.innerText = hourLabel;
-            
-            const textarea = document.createElement('textarea');
-            textarea.id = `hour-input-${i}`; 
-            textarea.classList.add('hour-input');
-            textarea.placeholder = `What did you do at ${hourLabel}?`;
-            textarea.value = dayHours[i] || ''; 
-            
-            let timeoutId;
-            textarea.addEventListener('input', (e) => {
-                const updatedVal = e.target.value;
-                dayHours[i] = updatedVal;
-                
-                clearTimeout(timeoutId);
-                timeoutId = setTimeout(() => {
-                    saveDayHours(dateStr, dayHours);
-                }, 800);
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.classList.add('todo-checkbox');
+            checkbox.checked = todo.done;
+            checkbox.addEventListener('change', () => {
+                todo.done = checkbox.checked;
+                saveDayTodos(dateStr, todos);
+                renderModalContent(dateStr);
             });
             
-            row.appendChild(label);
-            row.appendChild(textarea);
-            hourlyList.appendChild(row);
-        }
-        
-        const todayStr = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${currentDate.getDate().toString().padStart(2, '0')}`;
-        if (activeDateStr === todayStr) {
-            const currentHour = new Date().getHours();
-            setTimeout(() => {
-                const targetRow = hourlyList.children[currentHour];
-                if (targetRow) {
-                    targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 50); 
-        }
+            const span = document.createElement('span');
+            span.classList.add('todo-text');
+            span.innerText = todo.text;
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.classList.add('btn-delete-todo');
+            deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+            deleteBtn.title = 'Delete task';
+            deleteBtn.addEventListener('click', () => {
+                const updatedTodos = todos.filter(t => t.id !== todo.id);
+                saveDayTodos(dateStr, updatedTodos);
+                renderModalContent(dateStr);
+            });
+            
+            li.appendChild(checkbox);
+            li.appendChild(span);
+            li.appendChild(deleteBtn);
+            todoList.appendChild(li);
+        });
     }
+
+    function handleAddTodo() {
+        if (!activeDateStr) return;
+        const text = todoInput.value.trim();
+        if (text === '') return;
+        
+        const data = getStoredData();
+        const dayRecord = data[activeDateStr] || { todos: [], focusSessions: 0 };
+        const todos = dayRecord.todos || [];
+        
+        todos.push({
+            id: 'todo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            text: text,
+            done: false
+        });
+        
+        saveDayTodos(activeDateStr, todos);
+        todoInput.value = '';
+        renderModalContent(activeDateStr);
+    }
+
+    btnAddTodo.addEventListener('click', handleAddTodo);
+    todoInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleAddTodo();
+    });
     
     closeModalBtn.addEventListener('click', () => {
         dailyModal.classList.remove('active');
@@ -235,18 +300,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('prod-minus').addEventListener('click', () => {
-        if (activeDateStr && activeScore > 0) {
-            let newScore = activeScore - 1;
-            refreshProdScoreDisplay(newScore);
-            saveDayProdScore(activeDateStr, newScore);
+        if (activeDateStr && activeFocusSessions > 0) {
+            let newCount = activeFocusSessions - 1;
+            refreshFocusSessionsDisplay(newCount);
+            saveDayFocusSessions(activeDateStr, newCount);
         }
     });
 
     document.getElementById('prod-plus').addEventListener('click', () => {
         if (activeDateStr) {
-            let newScore = activeScore + 1;
-            refreshProdScoreDisplay(newScore);
-            saveDayProdScore(activeDateStr, newScore);
+            let newCount = activeFocusSessions + 1;
+            refreshFocusSessionsDisplay(newCount);
+            saveDayFocusSessions(activeDateStr, newCount);
         }
     });
 
@@ -289,14 +354,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const todayStr = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${currentDate.getDate().toString().padStart(2, '0')}`;
                 
                 const data = getStoredData();
-                if (!data[todayStr]) data[todayStr] = { hours: {}, prodScore: 0 };
-                data[todayStr].prodScore += 1;
+                if (!data[todayStr]) data[todayStr] = { todos: [], focusSessions: 0 };
+                data[todayStr].focusSessions = (data[todayStr].focusSessions || 0) + 1;
                 
                 saveStoredData(data);
                 
-                const updatedScore = data[todayStr].prodScore;
+                const updatedCount = data[todayStr].focusSessions;
                 if (activeDateStr === todayStr) {
-                    refreshProdScoreDisplay(updatedScore); 
+                    refreshFocusSessionsDisplay(updatedCount); 
                 }
                 renderCalendar();
             }
