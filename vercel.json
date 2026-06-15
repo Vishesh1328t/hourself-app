@@ -1,5 +1,0 @@
-{
-  "buildCommand": "echo 'Skipping build for Vercel'",
-  "installCommand": "echo 'Skipping install for Vercel'",
-  "outputDirectory": "."
-}

@@ -10,19 +10,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const calendarDays = document.getElementById('calendar-days');
     const currentMonthYear = document.getElementById('current-month-year');
     
-    // ---- Global State (Local File System / Storage) ----
+    // ---- Global State (Local Storage) ----
     
     function getStoredData() {
-        if (window.api) return window.api.loadData();
         return JSON.parse(localStorage.getItem('hourself_native_data')) || {};
     }
 
     function saveStoredData(data) {
-        if (window.api) {
-            window.api.saveData(data);
-        } else {
-            localStorage.setItem('hourself_native_data', JSON.stringify(data));
-        }
+        localStorage.setItem('hourself_native_data', JSON.stringify(data));
     }
 
     // ---- Data Helpers ----
@@ -274,7 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const m = Math.floor(seconds / 60).toString().padStart(2, '0');
         const s = (seconds % 60).toString().padStart(2, '0');
         displayElement.innerText = `${m}:${s}`;
-        document.title = `${m}:${s} - HourSelf`; 
+        document.title = `${m}:${s} - HTML CSS and JS`; 
     }
     
     function setTimerMode() {
@@ -345,6 +340,61 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     breakInput.addEventListener('change', () => { 
         if (!isRunning && !isFocusMode) setTimerMode(); 
+    });
+    
+    // ---- Data Backup and Restore ----
+    const btnExport = document.getElementById('btn-export');
+    const btnImportTrigger = document.getElementById('btn-import-trigger');
+    const importFile = document.getElementById('import-file');
+
+    btnExport.addEventListener('click', () => {
+        const data = getStoredData();
+        const dataStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `html_css_js_data_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    btnImportTrigger.addEventListener('click', () => {
+        importFile.click();
+    });
+
+    importFile.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedData = JSON.parse(event.target.result);
+                
+                if (typeof importedData !== 'object' || importedData === null) {
+                    alert('Invalid backup file structure.');
+                    return;
+                }
+
+                if (confirm('Are you sure you want to restore this backup? This will merge/overwrite your existing productivity data.')) {
+                    const currentData = getStoredData();
+                    const mergedData = { ...currentData, ...importedData };
+                    saveStoredData(mergedData);
+                    
+                    renderCalendar();
+                    alert('Data restored successfully!');
+                }
+            } catch (err) {
+                alert('Failed to parse the backup file. Please make sure it is a valid JSON file.');
+                console.error(err);
+            }
+            importFile.value = '';
+        };
+        reader.readAsText(file);
     });
     
     // ---- Initialization ----
