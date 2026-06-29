@@ -9,7 +9,7 @@
     <!-- Modern Typography -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=1.1">
 </head>
 <body>
     <div class="app-container">
@@ -40,16 +40,6 @@
                 </div>
             </div>
 
-            <!-- Local Data Storage & Backup Controls -->
-            <div class="storage-container">
-                <h3><i class="fa-solid fa-database"></i> Data Storage</h3>
-                <p class="storage-info">Stored locally in your browser. Backup to keep your data safe during updates.</p>
-                <div class="storage-actions">
-                    <button id="btn-export" class="btn secondary" title="Backup all data to a file"><i class="fa-solid fa-download"></i> Backup</button>
-                    <button id="btn-import-trigger" class="btn secondary" title="Restore data from a backup file"><i class="fa-solid fa-upload"></i> Restore</button>
-                    <input type="file" id="import-file" accept=".json" style="display: none;">
-                </div>
-            </div>
         </aside>
 
         <!-- Main Content: Calendar -->
@@ -124,6 +114,6 @@
     </div>
 
     <!-- Authentication Overlay Removed -->
-    <script src="app.js"></script>
+    <script src="app.js?v=1.1"></script>
 </body>
 </html>

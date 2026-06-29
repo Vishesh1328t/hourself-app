@@ -100,7 +100,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dayDiv = document.createElement('div');
                 dayDiv.classList.add('calendar-day');
                 
-                if (i === currentDate.getDate() && currentMonth === currentDate.getMonth() && currentYear === currentDate.getFullYear()) {
+                const today = new Date();
+                if (i === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear()) {
                     dayDiv.classList.add('today');
                 }
                 
@@ -351,7 +352,8 @@ document.addEventListener('DOMContentLoaded', () => {
             updateDisplay(timeRemaining);
         } else {
             if (isFocusMode) {
-                const todayStr = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${currentDate.getDate().toString().padStart(2, '0')}`;
+                const today = new Date();
+                const todayStr = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
                 
                 const data = getStoredData();
                 if (!data[todayStr]) data[todayStr] = { todos: [], focusSessions: 0 };
@@ -407,61 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isRunning && !isFocusMode) setTimerMode(); 
     });
     
-    // ---- Data Backup and Restore ----
-    const btnExport = document.getElementById('btn-export');
-    const btnImportTrigger = document.getElementById('btn-import-trigger');
-    const importFile = document.getElementById('import-file');
 
-    btnExport.addEventListener('click', () => {
-        const data = getStoredData();
-        const dataStr = JSON.stringify(data, null, 2);
-        const blob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `html_css_js_data_backup_${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    });
-
-    btnImportTrigger.addEventListener('click', () => {
-        importFile.click();
-    });
-
-    importFile.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const importedData = JSON.parse(event.target.result);
-                
-                if (typeof importedData !== 'object' || importedData === null) {
-                    alert('Invalid backup file structure.');
-                    return;
-                }
-
-                if (confirm('Are you sure you want to restore this backup? This will merge/overwrite your existing productivity data.')) {
-                    const currentData = getStoredData();
-                    const mergedData = { ...currentData, ...importedData };
-                    saveStoredData(mergedData);
-                    
-                    renderCalendar();
-                    alert('Data restored successfully!');
-                }
-            } catch (err) {
-                alert('Failed to parse the backup file. Please make sure it is a valid JSON file.');
-                console.error(err);
-            }
-            importFile.value = '';
-        };
-        reader.readAsText(file);
-    });
-    
     // ---- Initialization ----
     updateDisplay(timeRemaining);
     renderCalendar();
